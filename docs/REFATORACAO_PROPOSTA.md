@@ -31,15 +31,15 @@
 
 ### Stack Atual vs. Proposta
 
-| Aspecto            | Atual (PHP)               | Proposta                            |
-| ------------------ | ------------------------- | ----------------------------------- |
-| **Frontend**       | PHP + Tailwind (SSR)      | **Next.js 14+** (App Router)        |
-| **Backend**        | PHP Monolítico            | **Node.js + Fastify** ou **NestJS** |
-| **Banco de Dados** | MySQL                     | **PostgreSQL + Prisma ORM**         |
-| **Autenticação**   | Sessões PHP               | **NextAuth.js + JWT**               |
-| **Filas/Jobs**     | CRON (poll_questions.php) | **BullMQ + Redis**                  |
-| **Cache**          | Nenhum                    | **Redis**                           |
-| **Hospedagem**     | Hostinger (Shared)        | **Vercel + Railway/Render**         |
+| Aspecto            | Atual (PHP)               | Proposta                       |
+| ------------------ | ------------------------- | ------------------------------ |
+| **Frontend**       | PHP + Tailwind (SSR)      | **Next.js 14+** (App Router)   |
+| **Backend**        | PHP Monolítico            | **Node.js + Fastify**          |
+| **Banco de Dados** | MySQL                     | **MySQL (mesmo) + Prisma ORM** |
+| **Autenticação**   | Sessões PHP               | **NextAuth.js + JWT**          |
+| **Filas/Jobs**     | CRON (poll_questions.php) | **BullMQ + Redis**             |
+| **Cache**          | Nenhum                    | **Redis**                      |
+| **Hospedagem**     | Hostinger (Shared)        | **Vercel + VPS/Railway**       |
 
 ### Benefícios Esperados
 
@@ -124,9 +124,11 @@
 │                    ┌─────────────────┼─────────────────┐                    │
 │                    ▼                 ▼                 ▼                    │
 │   ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐         │
-│   │   PostgreSQL     │  │      Redis       │  │     BullMQ       │         │
-│   │   (Prisma ORM)   │  │  (Cache/Session) │  │   (Job Queue)    │         │
+│   │   MySQL          │  │      Redis       │  │     BullMQ       │         │
+│   │ (Hostinger/Prisma)│ │  (Cache/Session) │  │   (Job Queue)    │         │
 │   └──────────────────┘  └──────────────────┘  └──────────────────┘         │
+│           ▲                                                                 │
+│           │  Mesmo banco de dados atual!                                    │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -500,7 +502,18 @@ meli-ai-v2/
 
 ## 🗄 Banco de Dados
 
-### PostgreSQL + Prisma Schema
+### ⚠️ IMPORTANTE: Mantendo MySQL Existente
+
+O banco de dados **MySQL atual será mantido** com as mesmas tabelas e dados. O Prisma será usado para fazer **introspection** do schema existente e gerar os tipos TypeScript automaticamente.
+
+### Vantagens de Manter o MySQL
+
+- ✅ **Zero migração de dados** - Sem risco de perda
+- ✅ **Continuidade operacional** - Sistema atual continua funcionando durante a refatoração
+- ✅ **Mesma hospedagem** - Pode continuar usando o MySQL da Hostinger
+- ✅ **Rollback fácil** - Se algo der errado, o sistema PHP ainda funciona
+
+### Prisma Schema (Mapeando Tabelas Existentes)
 
 ```prisma
 // packages/database/prisma/schema.prisma
@@ -510,173 +523,226 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
-// ==================== ENUMS ====================
+// ==================== TABELA: saas_users (EXISTENTE) ====================
+// Mapeia exatamente para a tabela saas_users do MySQL atual
 
-enum SubscriptionStatus {
-  PENDING
-  ACTIVE
-  OVERDUE
-  CANCELED
-  EXPIRED
-}
+model SaasUser {
+  id                    Int       @id @default(autoincrement())
+  email                 String    @unique @db.VarChar(255)
+  passwordHash          String    @map("password_hash") @db.VarChar(255)
+  name                  String?   @db.VarChar(255)
+  cpfCnpj               String?   @map("cpf_cnpj") @db.VarChar(20)
+  whatsappJid           String?   @map("whatsapp_jid") @db.VarChar(50)
 
-enum QuestionStatus {
-  PENDING_AI
-  PENDING_APPROVAL
-  APPROVED
-  REJECTED
-  ANSWERED
-  TIMEOUT
-  ERROR
-}
-
-enum UserRole {
-  USER
-  ADMIN
-  SUPER_ADMIN
-}
-
-// ==================== MODELS ====================
-
-model User {
-  id                    String             @id @default(cuid())
-  email                 String             @unique
-  passwordHash          String             @map("password_hash")
-  name                  String
-  cpfCnpj               String?            @map("cpf_cnpj")
-  phone                 String?
-  whatsappJid           String?            @map("whatsapp_jid")
-  role                  UserRole           @default(USER)
-  isActive              Boolean            @default(true) @map("is_active")
-  emailVerified         DateTime?          @map("email_verified")
+  // Flags
+  isSaasActive          Boolean   @default(false) @map("is_saas_active")
+  isSuperAdmin          Boolean   @default(false) @map("is_super_admin")
 
   // Asaas
-  asaasCustomerId       String?            @map("asaas_customer_id")
-  asaasSubscriptionId   String?            @map("asaas_subscription_id")
-  subscriptionStatus    SubscriptionStatus @default(PENDING) @map("subscription_status")
-  subscriptionExpiresAt DateTime?          @map("subscription_expires_at")
-
-  // Relations
-  mercadoLibreAccounts  MercadoLibreAccount[]
-  questionLogs          QuestionLog[]
-  sessions              Session[]
-
-  // Timestamps
-  createdAt             DateTime           @default(now()) @map("created_at")
-  updatedAt             DateTime           @updatedAt @map("updated_at")
-
-  @@map("users")
-}
-
-model Session {
-  id           String   @id @default(cuid())
-  userId       String   @map("user_id")
-  token        String   @unique
-  expiresAt    DateTime @map("expires_at")
-  userAgent    String?  @map("user_agent")
-  ipAddress    String?  @map("ip_address")
-
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  createdAt    DateTime @default(now()) @map("created_at")
-
-  @@index([userId])
-  @@map("sessions")
-}
-
-model MercadoLibreAccount {
-  id                    String    @id @default(cuid())
-  userId                String    @map("user_id")
-  mlUserId              BigInt    @unique @map("ml_user_id")
-  mlNickname            String?   @map("ml_nickname")
-
-  // Tokens (criptografados)
-  accessTokenEncrypted  String    @map("access_token_encrypted")
-  refreshTokenEncrypted String    @map("refresh_token_encrypted")
-  tokenExpiresAt        DateTime  @map("token_expires_at")
-
-  // Config
-  isActive              Boolean   @default(true) @map("is_active")
-  aiEnabled             Boolean   @default(true) @map("ai_enabled")
-
-  // Relations
-  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  questionLogs          QuestionLog[]
+  asaasCustomerId       String?   @map("asaas_customer_id") @db.VarChar(100)
+  asaasSubscriptionId   String?   @map("asaas_subscription_id") @db.VarChar(100)
+  subscriptionStatus    String    @default("PENDING") @map("subscription_status") @db.VarChar(20)
+  subscriptionExpiresAt DateTime? @map("subscription_expires_at") @db.Date
 
   // Timestamps
   createdAt             DateTime  @default(now()) @map("created_at")
   updatedAt             DateTime  @updatedAt @map("updated_at")
 
-  @@index([userId])
-  @@map("mercadolibre_accounts")
+  // Relations
+  mercadoLibreUsers     MercadoLibreUser[]
+  questionLogs          QuestionProcessingLog[]
+
+  @@map("saas_users")
 }
 
-model QuestionLog {
-  id                          String         @id @default(cuid())
+// ==================== TABELA: mercadolibre_users (EXISTENTE) ====================
+// Mapeia exatamente para a tabela mercadolibre_users do MySQL atual
 
-  // IDs externos
-  mlQuestionId                BigInt         @unique @map("ml_question_id")
-  mlUserId                    BigInt         @map("ml_user_id")
-  itemId                      String         @map("item_id")
+model MercadoLibreUser {
+  id                    Int       @id @default(autoincrement())
+  saasUserId            Int       @map("saas_user_id")
+  mlUserId              BigInt    @unique @map("ml_user_id")
 
-  // Dados da pergunta
-  questionText                String         @map("question_text")
-  questionFromId              BigInt?        @map("question_from_id")
-  questionCreatedAt           DateTime?      @map("question_created_at")
+  // Tokens (criptografados com Defuse - MANTER COMPATIBILIDADE!)
+  accessToken           String?   @map("access_token") @db.Text
+  refreshToken          String?   @map("refresh_token") @db.Text
+  tokenExpiresAt        DateTime? @map("token_expires_at")
 
-  // IA
-  aiContextAnalysis           String?        @map("ai_context_analysis") @db.Text
-  aiSuggestedAnswer           String?        @map("ai_suggested_answer") @db.Text
-  finalAnswer                 String?        @map("final_answer") @db.Text
-
-  // Status
-  status                      QuestionStatus @default(PENDING_AI)
-  errorMessage                String?        @map("error_message")
-
-  // WhatsApp
-  whatsappNotificationMsgId   String?        @map("whatsapp_notification_msg_id")
-  whatsappNotifiedAt          DateTime?      @map("whatsapp_notified_at")
-
-  // Resposta
-  answeredAt                  DateTime?      @map("answered_at")
-  answeredBy                  String?        @map("answered_by") // 'AI_AUTO', 'USER_APPROVED', 'USER_EDITED'
-
-  // Relations
-  userId                      String         @map("user_id")
-  user                        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  mercadoLibreAccountId       String         @map("mercadolibre_account_id")
-  mercadoLibreAccount         MercadoLibreAccount @relation(fields: [mercadoLibreAccountId], references: [id], onDelete: Cascade)
+  // Config
+  isActive              Boolean   @default(true) @map("is_active")
 
   // Timestamps
-  createdAt                   DateTime       @default(now()) @map("created_at")
-  updatedAt                   DateTime       @updatedAt @map("updated_at")
-  lastProcessedAt             DateTime?      @map("last_processed_at")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  saasUser              SaasUser  @relation(fields: [saasUserId], references: [id], onDelete: Cascade)
+  questionLogs          QuestionProcessingLog[]
+
+  @@index([saasUserId])
+  @@map("mercadolibre_users")
+}
+
+// ==================== TABELA: question_processing_log (EXISTENTE) ====================
+// Mapeia exatamente para a tabela question_processing_log do MySQL atual
+
+model QuestionProcessingLog {
+  id                          Int       @id @default(autoincrement())
+
+  // IDs externos
+  mlQuestionId                BigInt    @unique @map("ml_question_id")
+  mlUserId                    BigInt    @map("ml_user_id")
+  saasUserId                  Int       @map("saas_user_id")
+  itemId                      String?   @map("item_id") @db.VarChar(50)
+
+  // Dados da pergunta
+  questionText                String?   @map("question_text") @db.Text
+  questionFromId              BigInt?   @map("question_from_id")
+  questionCreatedAt           DateTime? @map("question_created_at")
+
+  // IA
+  contextForAi                String?   @map("context_for_ai") @db.LongText
+  aiSuggestedAnswer           String?   @map("ai_suggested_answer") @db.Text
+  finalAnswerSent             String?   @map("final_answer_sent") @db.Text
+
+  // Status: PENDING_AI, PENDING_APPROVAL, APPROVED, REJECTED, ANSWERED_ML, TIMEOUT, ERROR
+  status                      String    @default("PENDING_AI") @db.VarChar(30)
+  errorMessage                String?   @map("error_message") @db.Text
+
+  // WhatsApp
+  whatsappNotificationMessageId String?  @map("whatsapp_notification_message_id") @db.VarChar(100)
+  whatsappNotifiedAt          DateTime? @map("whatsapp_notified_at")
+
+  // Resposta
+  answeredAt                  DateTime? @map("answered_at")
+
+  // Timestamps
+  createdAt                   DateTime  @default(now()) @map("created_at")
+  lastProcessedAt             DateTime? @map("last_processed_at")
+
+  // Relations
+  saasUser                    SaasUser  @relation(fields: [saasUserId], references: [id], onDelete: Cascade)
+  mercadoLibreUser            MercadoLibreUser? @relation(fields: [mlUserId], references: [mlUserId])
 
   @@index([mlUserId])
   @@index([status])
-  @@index([userId])
-  @@map("question_logs")
-}
-
-model WebhookLog {
-  id          String   @id @default(cuid())
-  source      String   // 'mercadolibre', 'asaas', 'evolution'
-  event       String
-  payload     Json
-  processed   Boolean  @default(false)
-  error       String?
-
-  createdAt   DateTime @default(now()) @map("created_at")
-  processedAt DateTime? @map("processed_at")
-
-  @@index([source, processed])
-  @@map("webhook_logs")
+  @@index([saasUserId])
+  @@map("question_processing_log")
 }
 ```
+
+### Comando para Gerar Schema a partir do DB Existente
+
+```bash
+# Faz introspection do banco existente e gera o schema.prisma
+npx prisma db pull
+
+# Gera o Prisma Client com tipos TypeScript
+npx prisma generate
+```
+
+### Compatibilidade com Criptografia Defuse
+
+O sistema atual usa **Defuse PHP Encryption** para criptografar tokens. Para manter compatibilidade:
+
+```typescript
+// apps/api/src/utils/crypto.ts
+// Reimplementação do Defuse em Node.js
+
+import crypto from "crypto";
+
+// A mesma chave DEFUSE_ENCRYPTION_KEY usada no PHP
+const ENCRYPTION_KEY = process.env.DEFUSE_ENCRYPTION_KEY!;
+
+/**
+ * IMPORTANTE: Esta implementação precisa ser compatível com o Defuse PHP!
+ * O Defuse usa AES-256-CTR com HMAC-SHA256.
+ *
+ * Opção 1: Usar a mesma biblioteca portada para Node
+ * Opção 2: Descriptografar todos os tokens uma vez e recriptografar com novo método
+ * Opção 3: Manter PHP apenas para decrypt durante transição
+ */
+
+// Para migração gradual, podemos usar um microserviço PHP temporário
+// ou migrar os tokens em batch durante a transição
+
+export async function decryptFromDefuse(
+  encryptedData: string,
+): Promise<string> {
+  // Implementação compatível com Defuse PHP
+  // Ver: https://github.com/defuse/php-encryption/blob/master/docs/CryptoDetails.md
+
+  // Durante a transição, pode-se:
+  // 1. Chamar um endpoint PHP que faz o decrypt
+  // 2. Implementar o mesmo algoritmo em Node.js
+  // 3. Migrar todos os tokens para um novo formato
+
+  throw new Error("Implementar compatibilidade com Defuse PHP");
+}
+
+// Para NOVOS tokens, usar crypto nativo do Node.js
+export function encrypt(text: string): string {
+  const iv = crypto.randomBytes(16);
+  const key = crypto.scryptSync(ENCRYPTION_KEY, "salt", 32);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+
+  let encrypted = cipher.update(text, "utf8", "hex");
+  encrypted += cipher.final("hex");
+
+  const authTag = cipher.getAuthTag();
+
+  return iv.toString("hex") + ":" + authTag.toString("hex") + ":" + encrypted;
+}
+
+export function decrypt(encryptedText: string): string {
+  const [ivHex, authTagHex, encrypted] = encryptedText.split(":");
+
+  const iv = Buffer.from(ivHex, "hex");
+  const authTag = Buffer.from(authTagHex, "hex");
+  const key = crypto.scryptSync(ENCRYPTION_KEY, "salt", 32);
+
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(authTag);
+
+  let decrypted = decipher.update(encrypted, "hex", "utf8");
+  decrypted += decipher.final("utf8");
+
+  return decrypted;
+}
+```
+
+### Estratégia de Migração de Tokens
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│           MIGRAÇÃO DE TOKENS CRIPTOGRAFADOS                 │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  FASE 1: Convivência (Ambos sistemas rodando)              │
+│  ┌─────────────┐     ┌─────────────┐                       │
+│  │  Sistema    │     │  Sistema    │                       │
+│  │    PHP      │────▶│   Node.js   │                       │
+│  │  (Defuse)   │     │  (lê Defuse)│                       │
+│  └─────────────┘     └─────────────┘                       │
+│                                                             │
+│  FASE 2: Migração em Batch                                 │
+│  - Script PHP lê tokens Defuse                             │
+│  - Descriptografa e envia para Node.js                     │
+│  - Node.js recriptografa com novo método                   │
+│  - Atualiza campo no banco com novo formato                │
+│                                                             │
+│  FASE 3: Apenas Node.js                                    │
+│  - Todos os tokens em novo formato                         │
+│  - PHP desativado                                          │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+````
 
 ---
 
@@ -762,7 +828,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
 });
-```
+````
 
 ### Middleware de Proteção
 
@@ -957,7 +1023,9 @@ export const asaasWebhook: FastifyPluginAsync = async (fastify) => {
 
 ## 🚀 DevOps e Infraestrutura
 
-### Docker Compose (Desenvolvimento)
+### Docker Compose (Desenvolvimento Local)
+
+> ⚠️ **IMPORTANTE**: Em desenvolvimento, você pode usar um container MySQL local OU conectar diretamente ao MySQL da Hostinger. Para produção, manteremos o MySQL da Hostinger.
 
 ```yaml
 # docker-compose.yml
@@ -965,21 +1033,25 @@ export const asaasWebhook: FastifyPluginAsync = async (fastify) => {
 version: "3.8"
 
 services:
-  postgres:
-    image: postgres:16-alpine
+  # MySQL local para desenvolvimento (opcional)
+  # Em produção, usamos o MySQL da Hostinger
+  mysql:
+    image: mysql:8.0
     environment:
-      POSTGRES_USER: meli_ai
-      POSTGRES_PASSWORD: meli_ai_dev
-      POSTGRES_DB: meli_ai
+      MYSQL_ROOT_PASSWORD: root_dev
+      MYSQL_USER: meli_ai
+      MYSQL_PASSWORD: meli_ai_dev
+      MYSQL_DATABASE: meli_ai
     ports:
-      - "5432:5432"
+      - "3306:3306"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U meli_ai"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 5s
       timeout: 5s
       retries: 5
+    command: --default-authentication-plugin=mysql_native_password
 
   redis:
     image: redis:7-alpine
@@ -994,13 +1066,16 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
     environment:
-      DATABASE_URL: postgresql://meli_ai:meli_ai_dev@postgres:5432/meli_ai
+      # Desenvolvimento local (MySQL container)
+      DATABASE_URL: mysql://meli_ai:meli_ai_dev@mysql:3306/meli_ai
+      # OU: Hostinger (desenvolvimento remoto)
+      # DATABASE_URL: mysql://usuario:senha@host.hostinger.com:3306/database_name
       REDIS_URL: redis://redis:6379
       NODE_ENV: development
     ports:
       - "3001:3001"
     depends_on:
-      postgres:
+      mysql:
         condition: service_healthy
       redis:
         condition: service_started
@@ -1009,7 +1084,7 @@ services:
       - /app/node_modules
 
 volumes:
-  postgres_data:
+  mysql_data:
   redis_data:
 ```
 
@@ -1017,35 +1092,45 @@ volumes:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    OPÇÕES DE HOSPEDAGEM                     │
+│         OPÇÕES DE HOSPEDAGEM (Mantendo MySQL Hostinger)     │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
-│  OPÇÃO 1: Vercel + Railway (Recomendado para início)       │
-│  ┌─────────────┐   ┌─────────────┐   ┌─────────────┐       │
-│  │   Vercel    │   │   Railway   │   │   Railway   │       │
-│  │  (Next.js)  │   │  (Fastify)  │   │ (Postgres   │       │
-│  │   FREE/Pro  │   │   $5-20/mo  │   │  + Redis)   │       │
-│  └─────────────┘   └─────────────┘   └─────────────┘       │
-│  Custo: ~$15-40/mês                                        │
+│  ⚠️  O MySQL CONTINUA NA HOSTINGER (mesmo banco atual)     │
 │                                                             │
-│  OPÇÃO 2: Vercel + Render                                  │
+│  OPÇÃO 1: Vercel + Railway (Recomendado)                   │
 │  ┌─────────────┐   ┌─────────────┐   ┌─────────────┐       │
-│  │   Vercel    │   │   Render    │   │   Render    │       │
-│  │  (Next.js)  │   │  (Fastify)  │   │ (Postgres)  │       │
-│  │   FREE/Pro  │   │   $7/mo+    │   │   FREE+     │       │
+│  │   Vercel    │   │   Railway   │   │  Hostinger  │       │
+│  │  (Next.js)  │   │  (Fastify)  │   │   (MySQL)   │       │
+│  │   FREE/Pro  │   │   $5-20/mo  │   │   EXISTENTE │       │
 │  └─────────────┘   └─────────────┘   └─────────────┘       │
-│  Custo: ~$10-30/mês                                        │
+│                           │                  ▲              │
+│                           └──────────────────┘              │
+│  Redis: Railway ou Upstash (para filas)                    │
+│  Custo: ~$10-25/mês + Hostinger atual                      │
 │                                                             │
-│  OPÇÃO 3: DigitalOcean (Mais Controle)                     │
+│  OPÇÃO 2: Vercel + Render + Hostinger                      │
+│  ┌─────────────┐   ┌─────────────┐   ┌─────────────┐       │
+│  │   Vercel    │   │   Render    │   │  Hostinger  │       │
+│  │  (Next.js)  │   │  (Fastify)  │   │   (MySQL)   │       │
+│  │   FREE/Pro  │   │   $7/mo+    │   │   EXISTENTE │       │
+│  └─────────────┘   └─────────────┘   └─────────────┘       │
+│  Custo: ~$7-20/mês + Hostinger atual                       │
+│                                                             │
+│  OPÇÃO 3: VPS DigitalOcean/Vultr (Mais Controle)           │
 │  ┌─────────────────────────────────────────────────────┐   │
-│  │                 DigitalOcean App Platform            │   │
-│  │   Next.js + Fastify + Managed Postgres + Redis      │   │
-│  │   $20-50/mês (tudo incluído)                        │   │
+│  │                   VPS ($6-12/mês)                   │   │
+│  │      Next.js + Fastify + Redis (Docker)             │   │
+│  │                     ▼                               │   │
+│  │              MySQL Hostinger                        │   │
 │  └─────────────────────────────────────────────────────┘   │
+│  Custo: ~$6-12/mês + Hostinger atual                       │
 │                                                             │
-│  OPÇÃO 4: AWS/GCP (Enterprise)                             │
-│  ECS/Cloud Run + RDS/Cloud SQL + ElastiCache               │
-│  Custo: $50-200+/mês                                       │
+│  OPÇÃO 4: Manter tudo na Hostinger                         │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │              Hostinger VPS ou Business              │   │
+│  │      Node.js + MySQL (ambos na Hostinger)           │   │
+│  └─────────────────────────────────────────────────────┘   │
+│  Custo: Plano Hostinger atual                              │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -1060,8 +1145,8 @@ volumes:
 □ Criar monorepo com Turborepo
 □ Configurar Next.js 14 com App Router
 □ Configurar Fastify com TypeScript
-□ Configurar Prisma com PostgreSQL
-□ Configurar Docker Compose
+□ Conectar Prisma ao MySQL existente (db pull)
+□ Configurar Docker Compose para dev local
 □ Configurar ESLint + Prettier
 □ Configurar CI/CD básico (GitHub Actions)
 ```
@@ -1072,18 +1157,18 @@ volumes:
 □ Implementar NextAuth.js
 □ Criar páginas de login/registro
 □ Implementar middleware de proteção
-□ Migrar tabela de usuários
-□ Testar fluxo completo de auth
+□ Mapear tabela saas_users existente
+□ Testar fluxo completo com dados reais
 ```
 
 ### Fase 3: Core Features (Semana 4-5)
 
 ```
-□ Dashboard principal
+□ Dashboard principal (lendo MySQL existente)
 □ Integração OAuth Mercado Livre
 □ Página de billing/assinatura
 □ Integração Asaas
-□ Migrar dados de usuários existentes
+□ Validar compatibilidade com dados existentes
 ```
 
 ### Fase 4: IA e Webhooks (Semana 6-7)
