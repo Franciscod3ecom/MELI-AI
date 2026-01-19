@@ -1,6 +1,6 @@
 # 🚀 Proposta de Refatoração - Meli AI v2.0
 
-> **Versão:** 1.0  
+> **Versão:** 2.0  
 > **Data:** 19 de Janeiro de 2026  
 > **Status:** Proposta Técnica  
 > **Autor:** Equipe de Desenvolvimento
