@@ -1,0 +1,154 @@
+/**
+ * Arquivo: style.css
+ * Versão: v2.0 - Estilos Complementares para Meli AI (Tailwind CDN)
+ * Descrição: Define estilos base mínimos, fontes e pequenas melhorias
+ *            que complementam o Tailwind CSS.
+ */
+
+/* --- 1. CSS Variables (Optional but good practice) --- */
+:root {
+    /* Define base colors - Tailwind's dark: prefix will override where used */
+    --color-text-base: #1f2937;       /* gray-800 */
+    --color-text-muted: #6b7280;      /* gray-500 */
+    --color-bg-base: #f9fafb;         /* gray-50 */
+    --color-link: #2563eb;            /* blue-600 */
+    --color-link-hover: #1d4ed8;      /* blue-700 */
+
+    /* Define fonts */
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --color-text-base: #f3f4f6;       /* gray-100 */
+        --color-text-muted: #9ca3af;      /* gray-400 */
+        --color-bg-base: #111827;         /* gray-900 */
+        --color-link: #60a5fa;            /* blue-400 */
+        --color-link-hover: #93c5fd;      /* blue-300 */
+    }
+}
+
+/* --- 2. Base HTML & Body Styles --- */
+html {
+  scroll-behavior: smooth; /* Rolagem suave para links internos (#) */
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--color-text-base);
+  background-color: var(--color-bg-base);
+  /* Transição suave ao mudar tema claro/escuro */
+  transition: background-color 0.3s ease, color 0.3s ease;
+  /* Garante que o body ocupe pelo menos a altura da tela */
+  min-height: 100vh;
+   /* Usa flexbox para empurrar o footer para baixo */
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- 3. Base Link Styles (Tailwind often overrides this with specific classes) --- */
+a {
+  color: var(--color-link);
+  text-decoration: none; /* Remover sublinhado padrão */
+  transition: color 0.2s ease;
+}
+a:hover {
+  color: var(--color-link-hover);
+  text-decoration: underline; /* Adicionar sublinhado no hover */
+}
+
+/* --- 4. Specific Component Enhancements (Keep Minimal) --- */
+
+/* Empurrar o footer para baixo */
+/* Aplique a classe 'main-content' ao container principal de cada página */
+.main-content {
+    flex-grow: 1;
+}
+
+/* Custom Scrollbar for elements with class 'custom-scrollbar' */
+/* Apply this class e.g., to '.log-container' in dashboard.php */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px; /* For horizontal scrollbars if needed */
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 3px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.5); /* gray-400 with 50% opacity */
+  border-radius: 3px;
+  border: 1px solid transparent; /* Prevent border issues */
+  background-clip: content-box; /* Ensure border doesn't make thumb look smaller */
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(107, 114, 128, 0.6); /* gray-500 with 60% opacity */
+}
+
+/* Dark mode scrollbar */
+@media (prefers-color-scheme: dark) {
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+        background-color: rgba(107, 114, 128, 0.5); /* gray-500 with 50% opacity */
+    }
+     .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background-color: rgba(75, 85, 99, 0.6); /* gray-600 with 60% opacity */
+    }
+}
+
+
+/* Basic Details/Summary Styling (Remove default marker, add basic hover) */
+details > summary {
+  list-style: none; /* Hide the default marker */
+  cursor: pointer;
+  display: inline-block; /* Prevent summary taking full width */
+  /* Add any other base summary styles here if needed */
+}
+details > summary::-webkit-details-marker {
+  display: none; /* Hide marker specifically for Webkit */
+}
+/* Add slight visual feedback on summary hover if desired */
+/* details > summary:hover {
+   opacity: 0.8;
+} */
+
+/* Style for the arrow inside the summary (if you add one via HTML/JS) */
+details[open] > summary .arrow-down {
+  transform: rotate(180deg);
+}
+.arrow-down {
+    display: inline-block;
+    transition: transform 0.2s ease-in-out;
+    /* Style the SVG arrow itself with Tailwind classes in the HTML */
+}
+
+/* Estilos para tabelas no super_admin.php (mantidos do exemplo anterior) */
+/* (Apenas se você não estiver usando classes Tailwind diretamente nas tabelas) */
+/*
+table { width: 100%; }
+th, td { padding: 0.75rem; text-align: left; border-bottom-width: 1px; border-style: solid; }
+.light th, .light td { border-color: #e5e7eb; }
+.dark th, .dark td { border-color: #374151; }
+thead th { font-weight: 600; }
+*/
+
+/* Estilo para botões de ação pequenos (mantidos do exemplo anterior) */
+/* (Apenas se você não estiver usando classes Tailwind diretamente nos botões) */
+/*
+.action-btn {
+     padding: 0.25rem 0.5rem; font-size: 0.75rem; border-radius: 0.375rem;
+     margin-right: 0.5rem; margin-bottom: 0.25rem; display: inline-flex;
+     align-items: center; justify-content: center; text-decoration: none !important;
+     box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); transition: background-color 0.2s ease-in-out;
+}
+.action-btn:last-child { margin-right: 0; }
+.btn-green { background-color: #10b981; color: white; } .btn-green:hover { background-color: #059669; }
+.btn-yellow { background-color: #f59e0b; color: white; } .btn-yellow:hover { background-color: #d97706; }
+.btn-red { background-color: #ef4444; color: white; } .btn-red:hover { background-color: #dc2626; }
+*/
+
+/* --- 5. Helper Classes (Use Sparingly) --- */
+/* Example: Add a class if you need very specific text wrapping */
+/* .force-break-word {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+} */

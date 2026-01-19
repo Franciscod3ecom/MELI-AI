@@ -1,0 +1,17 @@
+{
+    "name": "seu-usuario/meliai",
+    "description": "SaaS Responder ML Project",
+    "type": "project",
+    "require": {
+        "php": ">=8.0",
+        "defuse/php-encryption": "^2.4",
+        "vlucas/phpdotenv": "^5.5"
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "preferred-install": "dist",
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

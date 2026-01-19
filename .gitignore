@@ -1,0 +1,25 @@
+# Logs
+*.log
+poll.log
+
+# Arquivos de ambiente e segredos
+.env
+secrets.php
+meliai_secure/
+
+# Dependências (opcional - descomente se não quiser versionar vendor)
+# /vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Backups
+*.bak
+*.backup
